@@ -42,6 +42,7 @@ import {
 } from '../../services/kaspaApi';
 import {
   importKpub,
+  parseKpubInfo,
   deriveAddressList,
   deriveKaspaKey,
   encodeKaspaAddress,
@@ -58,11 +59,24 @@ import {
 import { QrDisplay } from '../common/QrDisplay';
 import { QrScannerModal } from '../common/QrScannerModal';
 
+function getSampleRecipientAddress(net: NetworkId): string {
+  const prefix = NETWORKS[net]?.prefix || 'kaspatest';
+  const samplePubKeyBytes = new Uint8Array([
+    0x3a, 0x7b, 0x8c, 0x9d, 0x1e, 0x2f, 0x4a, 0x5b,
+    0x6c, 0x7d, 0x8e, 0x9f, 0x01, 0x12, 0x23, 0x34,
+    0x45, 0x56, 0x67, 0x78, 0x89, 0x9a, 0xab, 0xbc,
+    0xcd, 0xde, 0xef, 0xf0, 0x11, 0x22, 0x33, 0x44
+  ]);
+  return encodeKaspaAddress(prefix, 0, samplePubKeyBytes);
+}
+
 interface KasSeeWalletProps {
   importedKpub?: KaspaKpub | null;
   onSendTxToSigner?: (tx: UnsignedKaspaTx) => void;
   incomingSignedTx?: SignedKaspaTx | null;
   compactView?: boolean;
+  activeNetwork?: NetworkId;
+  onNetworkChange?: (net: NetworkId) => void;
 }
 
 export const KasSeeWallet: React.FC<KasSeeWalletProps> = ({
@@ -70,8 +84,10 @@ export const KasSeeWallet: React.FC<KasSeeWalletProps> = ({
   onSendTxToSigner,
   incomingSignedTx,
   compactView = false,
+  activeNetwork,
+  onNetworkChange,
 }) => {
-  const [network, setNetwork] = useState<NetworkId>('mainnet');
+  const [network, setNetwork] = useState<NetworkId>(activeNetwork || 'testnet-10');
   const [activeTab, setActiveTab] = useState<'overview' | 'send' | 'receive' | 'utxos' | 'history' | 'broadcast'>('overview');
 
   // KPUB & Address Derivation State
@@ -86,11 +102,11 @@ export const KasSeeWallet: React.FC<KasSeeWalletProps> = ({
   const [utxos, setUtxos] = useState<KaspaUtxo[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [networkStats, setNetworkStats] = useState<KaspaNetworkStats>({
-    bps: 1,
-    daaScore: 79420100,
-    hashrate: 420.5,
-    kasPriceUsd: 0.152,
-    blockReward: 31.25,
+    bps: 10,
+    daaScore: 118540920,
+    hashrate: 12.8,
+    kasPriceUsd: 0.0,
+    blockReward: 10,
   });
 
   // Send Form State
@@ -110,10 +126,18 @@ export const KasSeeWallet: React.FC<KasSeeWalletProps> = ({
   // Copy state
   const [copiedText, setCopiedText] = useState<string | null>(null);
 
+  // Sync external network prop
+  useEffect(() => {
+    if (activeNetwork && activeNetwork !== network) {
+      handleSetNetwork(activeNetwork);
+    }
+  }, [activeNetwork]);
+
   // Handle external imported KPUB
   useEffect(() => {
     if (importedKpub) {
-      applyKpub(importedKpub.kpub, importedKpub.network || network);
+      const targetNet = importedKpub.network || network;
+      applyKpub(importedKpub.kpub, targetNet);
     }
   }, [importedKpub]);
 
@@ -139,6 +163,22 @@ export const KasSeeWallet: React.FC<KasSeeWalletProps> = ({
     }
   }, [receiveAddresses, network]);
 
+  const handleSetNetwork = (newNet: NetworkId) => {
+    setNetwork(newNet);
+    if (onNetworkChange) {
+      onNetworkChange(newNet);
+    }
+    // Re-derive all addresses immediately so the prefix changes (kaspatest: vs kaspa:)
+    if (accountNode) {
+      const updatedAddresses = deriveAddressList(accountNode, newNet, 10, false, 0);
+      setReceiveAddresses(updatedAddresses);
+    }
+    // Revalidate recipient input against the new network
+    if (recipientInput) {
+      validateRecipientAddress(recipientInput, newNet);
+    }
+  };
+
   const loadNetworkStats = async () => {
     const stats = await fetchNetworkStats(network);
     setNetworkStats(stats);
@@ -146,21 +186,27 @@ export const KasSeeWallet: React.FC<KasSeeWalletProps> = ({
 
   const applyKpub = (kpubString: string, net: NetworkId = network) => {
     try {
-      const node = importKpub(kpubString, net);
-      setAccountNode(node);
+      const parsed = parseKpubInfo(kpubString, net);
+      const effectiveNet = parsed.detectedNetwork || net;
+      
+      setAccountNode(parsed.node);
       setKpubInput(kpubString);
+      if (effectiveNet !== network) {
+        setNetwork(effectiveNet);
+        if (onNetworkChange) onNetworkChange(effectiveNet);
+      }
 
-      const addrs = deriveAddressList(node, net, 10, false, 0);
+      const addrs = deriveAddressList(parsed.node, effectiveNet, 10, false, 0);
       setReceiveAddresses(addrs);
 
       setCurrentKpub({
         kpub: kpubString,
-        fingerprint: node.fingerprint.toString(16).padStart(8, '0'),
-        depth: node.depth,
-        childNumber: node.index,
-        chainCode: '',
-        publicKey: '',
-        network: net,
+        fingerprint: parsed.fingerprintHex,
+        depth: parsed.node.depth,
+        childNumber: parsed.node.index,
+        chainCode: parsed.chainCodeHex,
+        publicKey: parsed.publicKeyHex,
+        network: effectiveNet,
       });
     } catch (err: any) {
       alert('Invalid KPUB format: ' + err.message);
@@ -192,30 +238,48 @@ export const KasSeeWallet: React.FC<KasSeeWalletProps> = ({
       return;
     }
 
-    const newUtxos = requestSandboxFaucet(primaryAddr, 250);
+    const newUtxos = requestSandboxFaucet(primaryAddr, 250, network);
     setUtxos(newUtxos);
     const total = newUtxos.reduce((acc, u) => acc + BigInt(u.utxoEntry.amount), 0n);
     setBalanceSompi(total.toString());
     confetti({ particleCount: 40, spread: 60, origin: { y: 0.8 } });
   };
 
-  const handleRecipientChange = (val: string) => {
-    setRecipientInput(val);
+  const validateRecipientAddress = (val: string, currentNet: NetworkId = network): boolean => {
     if (!val.trim()) {
       setRecipientError(null);
-      return;
+      return false;
     }
     const decoded = decodeKaspaAddress(val.trim());
     if (!decoded.valid) {
-      setRecipientError(decoded.error || 'Invalid Kaspa address');
-    } else {
-      setRecipientError(null);
+      setRecipientError(decoded.error || 'Invalid Kaspa address format');
+      return false;
     }
+    const expectedPrefix = NETWORKS[currentNet]?.prefix || 'kaspatest';
+    if (decoded.prefix !== expectedPrefix) {
+      setRecipientError(
+        `Network Prefix Mismatch: Address has '${decoded.prefix}:', but KasSee is set to ${NETWORKS[currentNet].name} ('${expectedPrefix}:'). Both must match.`
+      );
+      return false;
+    }
+    setRecipientError(null);
+    return true;
+  };
+
+  const handleRecipientChange = (val: string) => {
+    setRecipientInput(val);
+    validateRecipientAddress(val, network);
+  };
+
+  const handleFillSampleRecipient = () => {
+    const sample = getSampleRecipientAddress(network);
+    setRecipientInput(sample);
+    validateRecipientAddress(sample, network);
   };
 
   const handleBuildTransaction = () => {
-    if (!recipientInput || recipientError) {
-      alert('Please enter a valid recipient Kaspa address');
+    if (!recipientInput || !validateRecipientAddress(recipientInput, network)) {
+      alert(`Please enter a valid ${NETWORKS[network].name} recipient address (${NETWORKS[network].prefix}:...)`);
       return;
     }
 
@@ -226,7 +290,7 @@ export const KasSeeWallet: React.FC<KasSeeWalletProps> = ({
     }
 
     if (utxos.length === 0) {
-      alert('No UTXOs available to spend. Try requesting faucet coins or depositing KAS.');
+      alert('No UTXOs available to spend. Click "+250 KAS Faucet" to fund this address with testnet coins.');
       return;
     }
 
@@ -253,7 +317,7 @@ export const KasSeeWallet: React.FC<KasSeeWalletProps> = ({
         return;
       }
 
-      // Change address: derive change address at index 0
+      // Change address: derive change address at index 0 on the CURRENT network
       let changeAddr = receiveAddresses[0]?.address;
       if (accountNode) {
         const changeKey = deriveKaspaKey(accountNode, 0, true);
@@ -338,14 +402,14 @@ export const KasSeeWallet: React.FC<KasSeeWalletProps> = ({
           <select
             id="sel-kassee-network"
             value={network}
-            onChange={e => setNetwork(e.target.value as NetworkId)}
+            onChange={e => handleSetNetwork(e.target.value as NetworkId)}
             className="bg-[#0F1115] border border-[#222630] text-[#E2E8F0] text-xs font-mono rounded-xl px-2.5 py-1.5 outline-none cursor-pointer focus:border-[#F27D26]"
           >
-            <option value="mainnet">Mainnet</option>
-            <option value="testnet-10">Testnet-10</option>
+            <option value="testnet-10">⚡ Testnet-10 (10 BPS)</option>
+            <option value="mainnet">Kaspa Mainnet (1 BPS)</option>
             <option value="testnet-11">Testnet-11 (10 BPS)</option>
-            <option value="devnet">Devnet</option>
-            <option value="simnet">Sandbox Faucet</option>
+            <option value="devnet">Kaspa Devnet</option>
+            <option value="simnet">Sandbox Simulator</option>
           </select>
         </div>
       </div>
@@ -355,9 +419,11 @@ export const KasSeeWallet: React.FC<KasSeeWalletProps> = ({
         <div className="flex items-center gap-3">
           <span className="flex items-center gap-1 text-[#F27D26]">
             <TrendingUp className="w-3 h-3" />
-            ${networkStats.kasPriceUsd.toFixed(3)} USD
+            {network === 'mainnet' ? `$${networkStats.kasPriceUsd.toFixed(3)} USD` : 'Testnet KAS'}
           </span>
-          <span>BPS: {networkStats.bps}</span>
+          <span className={`px-2 py-0.5 rounded font-bold ${networkStats.bps === 10 ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'text-[#94A3B8]'}`}>
+            ⚡ {networkStats.bps} BPS
+          </span>
         </div>
         <div className="flex items-center gap-1">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
@@ -525,9 +591,14 @@ export const KasSeeWallet: React.FC<KasSeeWalletProps> = ({
             {activeTab === 'send' && (
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-mono font-bold text-[#F27D26] uppercase">
-                    Build Unsigned Kaspa Transaction (KSPT)
-                  </h4>
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-xs font-mono font-bold text-[#F27D26] uppercase">
+                      Build Unsigned Tx (KSPT)
+                    </h4>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#161920] border border-[#222630] text-[#94A3B8]">
+                      Target: <strong className="text-white">{NETWORKS[network].name}</strong>
+                    </span>
+                  </div>
                   <span className="text-[11px] font-mono text-[#94A3B8]">
                     Bal: {sompiToKas(balanceSompi)} KAS
                   </span>
@@ -535,11 +606,20 @@ export const KasSeeWallet: React.FC<KasSeeWalletProps> = ({
 
                 {/* Recipient Address */}
                 <div className="space-y-1">
-                  <label className="text-xs font-mono text-[#E2E8F0]">Recipient Kaspa Address:</label>
+                  <div className="flex justify-between items-center text-xs font-mono text-[#E2E8F0]">
+                    <label>Recipient Kaspa Address ({NETWORKS[network].prefix}:...):</label>
+                    <button
+                      type="button"
+                      onClick={handleFillSampleRecipient}
+                      className="text-[#F27D26] hover:underline text-[11px] flex items-center gap-1"
+                    >
+                      + Use Sample {network === 'mainnet' ? 'Mainnet' : 'Testnet-10'} Address
+                    </button>
+                  </div>
                   <input
                     id="inp-kassee-recipient"
                     type="text"
-                    placeholder="kaspa:qq... or kaspatest:qq..."
+                    placeholder={`${NETWORKS[network].prefix}:qq...`}
                     value={recipientInput}
                     onChange={e => handleRecipientChange(e.target.value)}
                     className={`w-full bg-[#161920] border rounded-xl p-2.5 text-xs font-mono text-[#E2E8F0] outline-none ${

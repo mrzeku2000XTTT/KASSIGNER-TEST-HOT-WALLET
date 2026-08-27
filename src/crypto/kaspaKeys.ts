@@ -310,13 +310,14 @@ export function deriveAddressList(
 /**
  * Format Kaspa Extended Public Key (kpub)
  */
-export function exportKpub(accountNode: HDNode, network: NetworkId = 'mainnet'): KaspaKpub {
+export function exportKpub(accountNode: HDNode, network: NetworkId = 'testnet-10'): KaspaKpub {
   const pubHex = Array.from(accountNode.publicKey).map(b => b.toString(16).padStart(2, '0')).join('');
   const chainCodeHex = Array.from(accountNode.chainCode).map(b => b.toString(16).padStart(2, '0')).join('');
   const fp = accountNode.fingerprint.toString(16).padStart(8, '0');
 
-  // Standard kpub string format
-  const serialized = `kpub${network === 'mainnet' ? '' : 'test'}:${fp}:${pubHex}:${chainCodeHex}`;
+  // Standard kpub string format (kpub: for mainnet, kpubtest: for testnets)
+  const isTest = network !== 'mainnet';
+  const serialized = `${isTest ? 'kpubtest' : 'kpub'}:${fp}:${pubHex}:${chainCodeHex}`;
 
   return {
     kpub: serialized,
@@ -329,20 +330,37 @@ export function exportKpub(accountNode: HDNode, network: NetworkId = 'mainnet'):
   };
 }
 
+export interface ParsedKpubResult {
+  node: HDNode;
+  detectedNetwork?: NetworkId;
+  fingerprintHex: string;
+  publicKeyHex: string;
+  chainCodeHex: string;
+}
+
 /**
- * Parse an imported kpub string into an HDNode (Public only)
+ * Parse an imported kpub string into an HDNode (Public only) and detect network
  */
-export function importKpub(kpubStr: string, network: NetworkId = 'mainnet'): HDNode {
+export function parseKpubInfo(kpubStr: string, fallbackNetwork: NetworkId = 'testnet-10'): ParsedKpubResult {
   const clean = kpubStr.trim();
   const parts = clean.split(':');
   if (parts.length === 4) {
-    const [, fpHex, pubHex, chainHex] = parts;
+    const [tag, fpHex, pubHex, chainHex] = parts;
+    const isTestnet = tag.toLowerCase().includes('test') || tag.toLowerCase().includes('sim');
+    const detectedNetwork: NetworkId = isTestnet ? 'testnet-10' : 'mainnet';
+
     return {
-      publicKey: hexToBytes(pubHex),
-      chainCode: hexToBytes(chainHex),
-      depth: 3,
-      index: 0x80000000,
-      fingerprint: parseInt(fpHex, 16) || 0,
+      node: {
+        publicKey: hexToBytes(pubHex),
+        chainCode: hexToBytes(chainHex),
+        depth: 3,
+        index: 0x80000000,
+        fingerprint: parseInt(fpHex, 16) || 0,
+      },
+      detectedNetwork,
+      fingerprintHex: fpHex,
+      publicKeyHex: pubHex,
+      chainCodeHex: chainHex,
     };
   }
 
@@ -350,17 +368,28 @@ export function importKpub(kpubStr: string, network: NetworkId = 'mainnet'): HDN
   try {
     const json = JSON.parse(clean);
     if (json.publicKey && json.chainCode) {
+      const fpHex = (json.fingerprint || '00000000').toString();
       return {
-        publicKey: hexToBytes(json.publicKey),
-        chainCode: hexToBytes(json.chainCode),
-        depth: json.depth || 3,
-        index: json.childNumber || 0,
-        fingerprint: parseInt(json.fingerprint, 16) || 0,
+        node: {
+          publicKey: hexToBytes(json.publicKey),
+          chainCode: hexToBytes(json.chainCode),
+          depth: json.depth || 3,
+          index: json.childNumber || 0,
+          fingerprint: typeof json.fingerprint === 'number' ? json.fingerprint : parseInt(fpHex, 16) || 0,
+        },
+        detectedNetwork: json.network || fallbackNetwork,
+        fingerprintHex: fpHex,
+        publicKeyHex: json.publicKey,
+        chainCodeHex: json.chainCode,
       };
     }
   } catch {}
 
-  throw new Error('Invalid kpub format. Expected format: kpub:<fp>:<pubkey>:<chaincode>');
+  throw new Error('Invalid kpub format. Expected format: kpub:<fp>:<pubkey>:<chaincode> or kpubtest:<fp>:<pubkey>:<chaincode>');
+}
+
+export function importKpub(kpubStr: string, network: NetworkId = 'testnet-10'): HDNode {
+  return parseKpubInfo(kpubStr, network).node;
 }
 
 // Helper conversions

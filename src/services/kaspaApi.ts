@@ -11,7 +11,7 @@ export const NETWORKS: Record<NetworkId, NetworkConfig> = {
   },
   'testnet-10': {
     id: 'testnet-10',
-    name: 'Kaspa Testnet-10',
+    name: 'Kaspa Testnet-10 (10 BPS)',
     prefix: 'kaspatest',
     apiUrl: 'https://api-tn10.kaspa.org',
     explorerUrl: 'https://explorer-tn10.kaspa.org',
@@ -36,7 +36,7 @@ export const NETWORKS: Record<NetworkId, NetworkConfig> = {
   'simnet': {
     id: 'simnet',
     name: 'Local Sandbox Simulator',
-    prefix: 'kaspa',
+    prefix: 'kaspatest',
     apiUrl: 'local://simnet',
     explorerUrl: '#sim-explorer',
     defaultFeeSompi: 10000,
@@ -64,12 +64,16 @@ const sandboxStore: LocalSandboxStore = {
   transactions: [],
 };
 
-// Seed sandbox with initial test UTXOs for any simulated address
-export function requestSandboxFaucet(address: string, amountKAS = 250): KaspaUtxo[] {
+// Seed sandbox or testnet with initial test UTXOs for any simulated address
+export function requestSandboxFaucet(address: string, amountKAS = 250, network: NetworkId = 'testnet-10'): KaspaUtxo[] {
   const sompiAmount = BigInt(Math.floor(amountKAS * 100_000_000)).toString();
   const txId = Array.from(crypto.getRandomValues(new Uint8Array(32)))
     .map(b => b.toString(16).padStart(2, '0'))
     .join('');
+
+  const isTestnet = network === 'testnet-10' || network === 'testnet-11' || network === 'simnet';
+  const prefix = isTestnet ? 'kaspatest' : (network === 'devnet' ? 'kaspadev' : 'kaspa');
+  const faucetSender = `${prefix}:faucet_genesis_coinbase_reward_block`;
 
   const newUtxo: KaspaUtxo = {
     address,
@@ -83,7 +87,9 @@ export function requestSandboxFaucet(address: string, amountKAS = 250): KaspaUtx
         version: 0,
         scriptPublicKey: `20${txId.slice(0, 64)}ac`,
       },
-      blockDaaScore: (75840000 + Math.floor(Math.random() * 50000)).toString(),
+      blockDaaScore: isTestnet
+        ? (118420000 + Math.floor(Math.random() * 50000)).toString()
+        : (79840000 + Math.floor(Math.random() * 50000)).toString(),
       isCoinbase: false,
     },
   };
@@ -94,10 +100,10 @@ export function requestSandboxFaucet(address: string, amountKAS = 250): KaspaUtx
 
   sandboxStore.transactions.unshift({
     txId,
-    network: 'simnet',
+    network,
     timestamp: Date.now(),
     amountSompi: sompiAmount,
-    sender: 'kaspa:faucet_genesis_coinbase_reward_block',
+    sender: faucetSender,
     recipient: address,
     feeSompi: '0',
     status: 'confirmed',
@@ -126,11 +132,12 @@ export async function fetchKaspaPrice(): Promise<number> {
   return 0.152; // realistic fallback
 }
 
-export async function fetchNetworkStats(network: NetworkId = 'mainnet'): Promise<KaspaNetworkStats> {
+export async function fetchNetworkStats(network: NetworkId = 'testnet-10'): Promise<KaspaNetworkStats> {
   const config = NETWORKS[network];
   let price = 0.152;
-  let daa = 79420100;
-  let hashrate = 420.5;
+  const is10Bps = network === 'testnet-10' || network === 'testnet-11';
+  let daa = is10Bps ? 118540920 : 79420100;
+  let hashrate = is10Bps ? 12.8 : 420.5;
 
   if (network === 'mainnet') {
     try {
@@ -141,14 +148,24 @@ export async function fetchNetworkStats(network: NetworkId = 'mainnet'): Promise
         if (d.virtualDaaScore) daa = Number(d.virtualDaaScore);
       }
     } catch {}
+  } else if (is10Bps) {
+    price = 0.0; // Testnet has 0 real fiat value
+    try {
+      const res = await fetch(`${config.apiUrl}/info/network`, { signal: AbortSignal.timeout(3000) });
+      if (res.ok) {
+        const d = await res.json();
+        if (d.virtualDaaScore) daa = Number(d.virtualDaaScore);
+        if (d.hashrate) hashrate = Number(d.hashrate);
+      }
+    } catch {}
   }
 
   return {
-    bps: network === 'testnet-11' ? 10 : 1,
+    bps: is10Bps ? 10 : 1,
     daaScore: daa,
     hashrate,
     kasPriceUsd: price,
-    blockReward: 31.25,
+    blockReward: is10Bps ? 10 : 31.25,
   };
 }
 

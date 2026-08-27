@@ -214,7 +214,8 @@ export interface BoundaryVerificationResult {
 
 export function verifySignerBoundary(
   tx: UnsignedKaspaTx,
-  accountNode?: HDNode
+  accountNode?: HDNode,
+  signerNetwork?: NetworkId
 ): BoundaryVerificationResult {
   const warnings: string[] = [];
   const errors: string[] = [];
@@ -229,6 +230,13 @@ export function verifySignerBoundary(
     errors.push(`Input and Output amounts do not balance! Total In: ${totalIn}, Out+Fee: ${totalOut + fee}`);
   }
 
+  // Network compatibility check
+  if (signerNetwork && signerNetwork !== tx.network) {
+    warnings.push(
+      `⚠️ Network Mismatch: Signer device is set to ${signerNetwork.toUpperCase()}, but transaction is targeted for ${tx.network.toUpperCase()}. Both devices must be on the same network (e.g. Testnet-10) to operate.`
+    );
+  }
+
   const feePct = totalIn > 0n ? (Number(fee) / Number(totalIn)) * 100 : 0;
   if (feePct > 5) {
     warnings.push(`High Transaction Fee Warning: Fee is ${feePct.toFixed(2)}% of total input value (${sompiToKasRaw(fee)} KAS)`);
@@ -237,10 +245,11 @@ export function verifySignerBoundary(
   // Verify change outputs against known account node derivation
   const knownChangeAddresses = new Set<string>();
   if (accountNode) {
-    // Check first 50 change addresses
+    // Check first 50 change addresses for the tx's network prefix
+    const isTestnet = tx.network !== 'mainnet';
+    const prefix = isTestnet ? (tx.network === 'devnet' ? 'kaspadev' : 'kaspatest') : 'kaspa';
     for (let i = 0; i < 50; i++) {
       const derived = deriveKaspaKey(accountNode, i, true);
-      const prefix = tx.network === 'mainnet' ? 'kaspa' : 'kaspatest';
       const addr = encodeKaspaAddress(prefix, 0, derived.xOnlyPublicKey);
       knownChangeAddresses.add(addr.toLowerCase());
     }
@@ -297,7 +306,8 @@ export async function signKaspaTransaction(
 
   // Build mapping of derived address private keys
   const addressKeyMap = new Map<string, { privKey: Uint8Array; pubKeyHex: string }>();
-  const prefix = tx.network === 'mainnet' ? 'kaspa' : 'kaspatest';
+  const isTest = tx.network !== 'mainnet';
+  const prefix = isTest ? (tx.network === 'devnet' ? 'kaspadev' : 'kaspatest') : 'kaspa';
 
   // Pre-derive receive and change keys (up to index 100)
   for (let isChange of [false, true]) {

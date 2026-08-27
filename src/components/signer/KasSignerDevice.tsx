@@ -60,6 +60,8 @@ interface KasSignerDeviceProps {
   incomingUnsignedTx?: UnsignedKaspaTx | null;
   onSendSignedTxBack?: (signedTx: SignedKaspaTx) => void;
   compactView?: boolean;
+  activeNetwork?: NetworkId;
+  onNetworkChange?: (net: NetworkId) => void;
 }
 
 export const KasSignerDevice: React.FC<KasSignerDeviceProps> = ({
@@ -67,6 +69,8 @@ export const KasSignerDevice: React.FC<KasSignerDeviceProps> = ({
   incomingUnsignedTx,
   onSendSignedTxBack,
   compactView = false,
+  activeNetwork,
+  onNetworkChange,
 }) => {
   // Device Hardware State (Volatile RAM)
   const [devicePowered, setDevicePowered] = useState<boolean>(true);
@@ -75,7 +79,7 @@ export const KasSignerDevice: React.FC<KasSignerDeviceProps> = ({
   const [passphrase, setPassphrase] = useState<string>('');
   const [wordCount, setWordCount] = useState<12 | 24>(24);
   const [showSeedSecret, setShowSeedSecret] = useState<boolean>(false);
-  const [selectedNetwork, setSelectedNetwork] = useState<NetworkId>('mainnet');
+  const [selectedNetwork, setSelectedNetwork] = useState<NetworkId>(activeNetwork || 'testnet-10');
 
   // Key derivation in RAM
   const [accountNode, setAccountNode] = useState<HDNode | null>(null);
@@ -93,25 +97,46 @@ export const KasSignerDevice: React.FC<KasSignerDeviceProps> = ({
   const [isDiceMode, setIsDiceMode] = useState<boolean>(false);
   const [diceRolls, setDiceRolls] = useState<number[]>([]);
 
+  // Sync with activeNetwork prop
+  useEffect(() => {
+    if (activeNetwork && activeNetwork !== selectedNetwork) {
+      handleSetNetwork(activeNetwork);
+    }
+  }, [activeNetwork]);
+
   // Initialize with a fresh demo seed if empty on first power
   useEffect(() => {
     if (!accountNode && mnemonic === '') {
-      handleGenerateNewSeed(24);
+      handleGenerateNewSeed(24, selectedNetwork);
     }
   }, []);
 
   // Update transaction if passed from companion loopback
   useEffect(() => {
     if (incomingUnsignedTx) {
-      loadTransactionForReview(incomingUnsignedTx);
+      loadTransactionForReview(incomingUnsignedTx, selectedNetwork);
     }
   }, [incomingUnsignedTx]);
 
-  const handleGenerateNewSeed = (count: 12 | 24 = 24) => {
+  const handleSetNetwork = (net: NetworkId) => {
+    setSelectedNetwork(net);
+    if (onNetworkChange) {
+      onNetworkChange(net);
+    }
+    if (mnemonic) {
+      deriveKeysFromMnemonic(mnemonic, passphrase, net);
+    }
+    if (activeTx) {
+      const review = verifySignerBoundary(activeTx, accountNode || undefined, net);
+      setBoundaryReview(review);
+    }
+  };
+
+  const handleGenerateNewSeed = (count: 12 | 24 = 24, net: NetworkId = selectedNetwork) => {
     setWordCount(count);
     const newMnemonic = generateMnemonic(count);
     setMnemonic(newMnemonic);
-    deriveKeysFromMnemonic(newMnemonic, passphrase, selectedNetwork);
+    deriveKeysFromMnemonic(newMnemonic, passphrase, net);
   };
 
   const deriveKeysFromMnemonic = (mnem: string, pass: string, net: NetworkId) => {
@@ -153,9 +178,9 @@ export const KasSignerDevice: React.FC<KasSignerDeviceProps> = ({
     }
   };
 
-  const loadTransactionForReview = (tx: UnsignedKaspaTx) => {
+  const loadTransactionForReview = (tx: UnsignedKaspaTx, net: NetworkId = selectedNetwork) => {
     setActiveTx(tx);
-    const review = verifySignerBoundary(tx, accountNode || undefined);
+    const review = verifySignerBoundary(tx, accountNode || undefined, net);
     setBoundaryReview(review);
     setActiveScreen('review');
   };
@@ -231,12 +256,23 @@ export const KasSignerDevice: React.FC<KasSignerDeviceProps> = ({
         </div>
 
         {/* Hardware Status Indicators */}
-        <div className="flex items-center gap-3 text-[11px] font-mono">
-          <span className="bg-[#161920] border border-[#222630] px-2 py-0.5 rounded text-amber-300 flex items-center gap-1">
+        <div className="flex items-center gap-2 text-[11px] font-mono">
+          <select
+            id="sel-kassigner-network"
+            value={selectedNetwork}
+            onChange={e => handleSetNetwork(e.target.value as NetworkId)}
+            className="bg-[#0F1115] border border-[#222630] text-[#E2E8F0] text-[11px] font-mono rounded-lg px-2 py-1 outline-none cursor-pointer focus:border-[#F27D26]"
+          >
+            <option value="testnet-10">⚡ Testnet-10</option>
+            <option value="mainnet">Mainnet</option>
+            <option value="testnet-11">Testnet-11</option>
+            <option value="devnet">Devnet</option>
+            <option value="simnet">Sandbox</option>
+          </select>
+          <span className="bg-[#161920] border border-[#222630] px-2 py-1 rounded text-amber-300 flex items-center gap-1">
             <Flame className="w-3 h-3 text-amber-400" />
             {accountNode ? 'RAM: ACTIVE' : 'RAM: EMPTY'}
           </span>
-          <span className="text-emerald-400 hidden sm:inline">AIR-GAPPED ⚡ 4.18V</span>
         </div>
       </div>
 
