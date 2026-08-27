@@ -451,25 +451,31 @@ export const KasSignerDevice: React.FC<KasSignerDeviceProps> = ({
                 </div>
               </div>
 
-              {/* Seed Words Grid */}
+              {/* Seed Words Grid or Input */}
               <div className="relative p-3 bg-[#12151B] border border-[#222630] rounded-2xl">
-                <div className={`grid grid-cols-3 sm:grid-cols-4 gap-1.5 ${showSeedSecret ? '' : 'blur-sm select-none'}`}>
-                  {words.map((word, idx) => (
-                    <div key={idx} className="bg-[#161920] px-2 py-1 rounded text-[11px] font-mono flex items-center justify-between border border-[#222630]">
-                      <span className="text-[#64748B] text-[10px]">#{idx + 1}</span>
-                      <span className="text-[#E2E8F0] font-semibold">{word}</span>
-                    </div>
-                  ))}
-                </div>
-
-                {!showSeedSecret && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/50 backdrop-blur-[2px] rounded-2xl">
+                {!showSeedSecret ? (
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/50 backdrop-blur-[2px] rounded-2xl z-10">
                     <button
                       onClick={() => setShowSeedSecret(true)}
                       className="px-3 py-1.5 bg-[#161920] hover:bg-[#222630] text-[#F27D26] text-xs font-mono font-semibold rounded-xl flex items-center gap-1.5 border border-[#F27D26]/40 shadow-lg"
                     >
-                      <Eye className="w-3.5 h-3.5" /> Click to Reveal Words
+                      <Eye className="w-3.5 h-3.5" /> Click to Reveal or Edit Words
                     </button>
+                  </div>
+                ) : null}
+                
+                <textarea
+                  value={mnemonic}
+                  onChange={(e) => {
+                    setMnemonic(e.target.value);
+                    deriveKeysFromMnemonic(e.target.value, passphrase, selectedNetwork);
+                  }}
+                  className={`w-full bg-[#161920] border ${!accountNode && mnemonic ? 'border-red-500/50' : 'border-[#222630] focus:border-[#F27D26]'} text-[#E2E8F0] text-xs font-mono rounded-xl p-3 outline-none resize-none min-h-[90px] ${!showSeedSecret ? 'blur-sm select-none' : ''}`}
+                  placeholder="Paste your 12 or 24-word Kaspa seed phrase here (all lowercase, space separated)..."
+                />
+                {!accountNode && mnemonic.trim().length > 0 && showSeedSecret && (
+                  <div className="text-red-400 text-[10px] font-mono mt-1 px-1">
+                    ⚠️ Invalid seed phrase or checksum. Check for typos or extra spaces.
                   </div>
                 )}
               </div>
