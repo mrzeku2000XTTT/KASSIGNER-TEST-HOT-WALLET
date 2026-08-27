@@ -20,7 +20,8 @@ import {
   Sparkles,
   Camera,
   Check,
-  RotateCcw
+  RotateCcw,
+  Copy
 } from 'lucide-react';
 import {
   generateMnemonic,
@@ -96,6 +97,13 @@ export const KasSignerDevice: React.FC<KasSignerDeviceProps> = ({
   // Dice roll interactive entropy state
   const [isDiceMode, setIsDiceMode] = useState<boolean>(false);
   const [diceRolls, setDiceRolls] = useState<number[]>([]);
+  const [isCopied, setIsCopied] = useState<boolean>(false);
+
+  const handleCopySeed = () => {
+    navigator.clipboard.writeText(mnemonic);
+    setIsCopied(true);
+    setTimeout(() => setIsCopied(false), 2000);
+  };
 
   // Sync with activeNetwork prop
   useEffect(() => {
@@ -420,14 +428,23 @@ export const KasSignerDevice: React.FC<KasSignerDeviceProps> = ({
                 </h4>
                 <div className="flex items-center gap-1">
                   <button
+                    onClick={handleCopySeed}
+                    className="px-2 py-0.5 rounded text-[10px] font-mono text-[#94A3B8] hover:text-[#E2E8F0] hover:bg-[#222630] flex items-center gap-1 transition-colors"
+                    title="Copy Seed Phrase"
+                  >
+                    {isCopied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                    {isCopied ? 'Copied' : 'Copy'}
+                  </button>
+                  <div className="w-px h-3 bg-[#222630] mx-1"></div>
+                  <button
                     onClick={() => handleGenerateNewSeed(12)}
-                    className={`px-2 py-0.5 rounded text-[10px] font-mono ${wordCount === 12 ? 'bg-[#F27D26] text-slate-950 font-bold' : 'text-[#94A3B8]'}`}
+                    className={`px-2 py-0.5 rounded text-[10px] font-mono ${wordCount === 12 ? 'bg-[#F27D26] text-slate-950 font-bold' : 'text-[#94A3B8] hover:bg-[#222630]'}`}
                   >
                     12 Words
                   </button>
                   <button
                     onClick={() => handleGenerateNewSeed(24)}
-                    className={`px-2 py-0.5 rounded text-[10px] font-mono ${wordCount === 24 ? 'bg-[#F27D26] text-slate-950 font-bold' : 'text-[#94A3B8]'}`}
+                    className={`px-2 py-0.5 rounded text-[10px] font-mono ${wordCount === 24 ? 'bg-[#F27D26] text-slate-950 font-bold' : 'text-[#94A3B8] hover:bg-[#222630]'}`}
                   >
                     24 Words
                   </button>
