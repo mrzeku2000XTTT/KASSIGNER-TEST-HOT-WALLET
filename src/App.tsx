@@ -22,11 +22,18 @@ import { KasSignerDevice } from './components/signer/KasSignerDevice';
 import { KasSeeWallet } from './components/wallet/KasSeeWallet';
 import { StegoVault } from './components/stego/StegoVault';
 import { PskbInspector } from './components/tools/PskbInspector';
+import { InteractiveTutorial } from './components/tutorial/InteractiveTutorial';
 
-type ActiveView = 'studio' | 'kassigner' | 'kassee' | 'stego' | 'pskb' | 'docs';
+type ActiveView = 'tutorial' | 'studio' | 'kassigner' | 'kassee' | 'stego' | 'pskb' | 'docs';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<ActiveView>('studio');
+  const [studioInitialStep, setStudioInitialStep] = useState<number>(1);
+
+  const handleNavigateToStudio = (step: number = 1) => {
+    setStudioInitialStep(step);
+    setCurrentView('studio');
+  };
 
   return (
     <div className="min-h-screen bg-[#0F1115] text-[#E2E8F0] flex flex-col selection:bg-[#F27D26]/30 selection:text-[#F27D26] font-sans">
@@ -56,6 +63,7 @@ export default function App() {
           {/* Main View Switcher Tabs */}
           <nav className="flex items-center gap-1 bg-[#161920] p-1 rounded-2xl border border-[#222630] overflow-x-auto max-w-full text-xs font-mono">
             {[
+              { id: 'tutorial', label: 'Tutorial & Guide', icon: Sparkles },
               { id: 'studio', label: 'Air-Gap Studio', icon: Zap },
               { id: 'kassigner', label: 'KasSigner (Hardware)', icon: Cpu },
               { id: 'kassee', label: 'KasSee (Companion)', icon: Eye },
@@ -69,7 +77,7 @@ export default function App() {
                   key={tab.id}
                   id={`nav-tab-${tab.id}`}
                   onClick={() => setCurrentView(tab.id as ActiveView)}
-                  className={`px-3 py-2 rounded-xl transition-all whitespace-nowrap flex items-center gap-1.5 ${
+                  className={`px-3 py-2 rounded-xl transition-all whitespace-nowrap flex items-center gap-1.5 cursor-pointer ${
                     currentView === tab.id
                       ? 'bg-[#F27D26] text-slate-950 font-bold shadow-md shadow-[#F27D26]/20'
                       : 'text-[#94A3B8] hover:text-white hover:bg-[#222630]'
@@ -101,7 +109,16 @@ export default function App() {
 
       {/* Main Content Viewport */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 flex flex-col">
-        {currentView === 'studio' && <DualAirGapStudio />}
+        {currentView === 'tutorial' && (
+          <InteractiveTutorial onNavigateToStudio={handleNavigateToStudio} />
+        )}
+
+        {currentView === 'studio' && (
+          <DualAirGapStudio
+            initialStep={studioInitialStep}
+            onOpenTutorial={() => setCurrentView('tutorial')}
+          />
+        )}
 
         {currentView === 'kassigner' && (
           <div className="w-full flex-1 flex flex-col items-center justify-center">

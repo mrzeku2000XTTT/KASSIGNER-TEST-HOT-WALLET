@@ -18,11 +18,19 @@ import { KasSignerDevice } from '../signer/KasSignerDevice';
 import { KasSeeWallet } from '../wallet/KasSeeWallet';
 import { KaspaKpub, UnsignedKaspaTx, SignedKaspaTx } from '../../types/kaspa';
 
-export const DualAirGapStudio: React.FC = () => {
+interface DualAirGapStudioProps {
+  initialStep?: number;
+  onOpenTutorial?: () => void;
+}
+
+export const DualAirGapStudio: React.FC<DualAirGapStudioProps> = ({
+  initialStep = 1,
+  onOpenTutorial,
+}) => {
   const [syncedKpub, setSyncedKpub] = useState<KaspaKpub | null>(null);
   const [unsignedTxInFlight, setUnsignedTxInFlight] = useState<UnsignedKaspaTx | null>(null);
   const [signedTxInFlight, setSignedTxInFlight] = useState<SignedKaspaTx | null>(null);
-  const [activeStep, setActiveStep] = useState<number>(1);
+  const [activeStep, setActiveStep] = useState<number>(initialStep);
   const [isOpticalTransmitting, setIsOpticalTransmitting] = useState<boolean>(false);
 
   const handlePairFromSigner = (kpub: KaspaKpub) => {
@@ -40,11 +48,11 @@ export const DualAirGapStudio: React.FC = () => {
     setActiveStep(4);
   };
 
-  const simulateOpticalTransmission = (direction: 'toSigner' | 'toWallet') => {
-    setIsOpticalTransmitting(true);
-    setTimeout(() => {
-      setIsOpticalTransmitting(false);
-    }, 600);
+  const handleResetFlow = () => {
+    setSyncedKpub(null);
+    setUnsignedTxInFlight(null);
+    setSignedTxInFlight(null);
+    setActiveStep(1);
   };
 
   return (
@@ -63,6 +71,21 @@ export const DualAirGapStudio: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2">
+            {onOpenTutorial && (
+              <button
+                onClick={onOpenTutorial}
+                className="px-3 py-1.5 rounded-xl bg-[#12151B] hover:bg-[#222630] text-[#F27D26] text-xs font-mono border border-[#F27D26]/30 flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <Eye className="w-3.5 h-3.5" /> How It Works (Animation)
+              </button>
+            )}
+            <button
+              onClick={handleResetFlow}
+              className="p-1.5 rounded-xl bg-[#12151B] hover:bg-[#222630] text-[#94A3B8] hover:text-white border border-[#222630] text-xs font-mono transition-colors cursor-pointer"
+              title="Reset Simulation"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+            </button>
             <span className="text-[11px] font-mono px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5">
               <Lock className="w-3 h-3" /> Private Keys Never Leave RAM
             </span>
