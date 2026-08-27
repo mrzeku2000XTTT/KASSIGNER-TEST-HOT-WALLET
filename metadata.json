@@ -1,0 +1,6 @@
+{
+  "name": "KasSigner & KasSee Suite",
+  "description": "Air-gapped offline transaction signer, seed manager, steganographic vault, and KasSee watch-only companion wallet for the Kaspa blockchain.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
