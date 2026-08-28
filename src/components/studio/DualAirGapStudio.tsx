@@ -100,7 +100,7 @@ export const DualAirGapStudio: React.FC<DualAirGapStudioProps> = ({
                 className="bg-transparent text-white font-bold outline-none cursor-pointer"
               >
                 <option value="testnet-10" className="bg-[#161920] text-white">⚡ Testnet-10 (10 BPS)</option>
-                <option value="mainnet" className="bg-[#161920] text-white">Kaspa Mainnet (1 BPS)</option>
+                <option value="mainnet" className="bg-[#161920] text-white">Kaspa Mainnet (10 BPS)</option>
                 <option value="testnet-11" className="bg-[#161920] text-white">Testnet-11 (10 BPS)</option>
                 <option value="devnet" className="bg-[#161920] text-white">Devnet</option>
                 <option value="simnet" className="bg-[#161920] text-white">Local Sandbox</option>

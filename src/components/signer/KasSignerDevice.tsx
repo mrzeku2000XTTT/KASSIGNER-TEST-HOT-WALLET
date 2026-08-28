@@ -481,21 +481,26 @@ export const KasSignerDevice: React.FC<KasSignerDeviceProps> = ({
               </div>
 
               {/* Passphrase (25th Word) */}
-              <div className="p-3 bg-[#161920] border border-[#222630] rounded-xl flex items-center justify-between gap-2">
-                <div className="text-[11px] font-mono text-[#94A3B8] flex items-center gap-1">
-                  <Lock className="w-3 h-3 text-[#F27D26]" />
-                  Passphrase (Optional):
+              <div className="p-3 bg-[#161920] border border-[#222630] rounded-xl flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <div className="text-[11px] font-mono text-[#94A3B8] flex items-center gap-1">
+                    <Lock className="w-3 h-3 text-[#F27D26]" />
+                    Passphrase (Advanced):
+                  </div>
+                  <input
+                    type="password"
+                    value={passphrase}
+                    onChange={e => {
+                      setPassphrase(e.target.value);
+                      deriveKeysFromMnemonic(mnemonic, e.target.value, selectedNetwork);
+                    }}
+                    placeholder="Leave blank for web wallet"
+                    className="bg-[#0F1115] border border-[#222630] text-[#E2E8F0] text-xs font-mono rounded px-2 py-1 outline-none w-48 focus:border-[#F27D26]"
+                  />
                 </div>
-                <input
-                  type="password"
-                  value={passphrase}
-                  onChange={e => {
-                    setPassphrase(e.target.value);
-                    deriveKeysFromMnemonic(mnemonic, e.target.value, selectedNetwork);
-                  }}
-                  placeholder="25th word"
-                  className="bg-[#0F1115] border border-[#222630] text-[#E2E8F0] text-xs font-mono rounded px-2 py-1 outline-none w-36 focus:border-[#F27D26]"
-                />
+                <p className="text-[9px] font-mono text-amber-500/80 leading-relaxed">
+                  ⚠️ <strong>Note on Web Wallet Import:</strong> The standard Kaspa Web Wallet does not support passphrases in its UI. Leave this blank if you intend to import there. A passphrase is NOT a 13th/25th word—do not type it into the recovery phrase grid!
+                </p>
               </div>
 
               {/* Dice Roll Entropy Sub-panel */}

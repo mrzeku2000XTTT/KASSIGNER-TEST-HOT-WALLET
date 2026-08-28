@@ -170,7 +170,7 @@ export const KasSeeWallet: React.FC<KasSeeWalletProps> = ({
     }
     // Re-derive all addresses immediately so the prefix changes (kaspatest: vs kaspa:)
     if (accountNode) {
-      const updatedAddresses = deriveAddressList(accountNode, newNet, 10, false, 0);
+      const updatedAddresses = deriveAddressList(accountNode, newNet, 20, false, 0);
       setReceiveAddresses(updatedAddresses);
     }
     // Revalidate recipient input against the new network
@@ -196,7 +196,7 @@ export const KasSeeWallet: React.FC<KasSeeWalletProps> = ({
         if (onNetworkChange) onNetworkChange(effectiveNet);
       }
 
-      const addrs = deriveAddressList(parsed.node, effectiveNet, 10, false, 0);
+      const addrs = deriveAddressList(parsed.node, effectiveNet, 20, false, 0);
       setReceiveAddresses(addrs);
 
       setCurrentKpub({
@@ -218,12 +218,30 @@ export const KasSeeWallet: React.FC<KasSeeWalletProps> = ({
     setIsLoading(true);
 
     try {
-      const primaryAddr = receiveAddresses[selectedAddressIndex]?.address || receiveAddresses[0]?.address;
-      const { balanceSompi: bal } = await fetchAddressBalance(primaryAddr, network);
-      setBalanceSompi(bal);
-
-      const utxoList = await fetchAddressUtxos(primaryAddr, network);
-      setUtxos(utxoList);
+      // Check all derived receive addresses (up to current receiveAddresses length)
+      let allUtxos: typeof utxos = [];
+      for (const a of receiveAddresses) {
+        const utxoList = await fetchAddressUtxos(a.address, network);
+        if (utxoList && utxoList.length > 0) {
+          allUtxos = [...allUtxos, ...utxoList];
+        }
+      }
+      
+      // Also check change addresses if the accountNode is available
+      if (accountNode) {
+        const changeAddresses = deriveAddressList(accountNode, network, 20, true, 0);
+        for (const a of changeAddresses) {
+          const utxoList = await fetchAddressUtxos(a.address, network);
+          if (utxoList && utxoList.length > 0) {
+            allUtxos = [...allUtxos, ...utxoList];
+          }
+        }
+      }
+      
+      const totalBal = allUtxos.reduce((acc, u) => acc + BigInt(u.utxoEntry.amount), 0n);
+      
+      setBalanceSompi(totalBal.toString());
+      setUtxos(allUtxos);
     } catch (err) {
       console.warn('Error refreshing wallet balance:', err);
     } finally {
@@ -290,7 +308,7 @@ export const KasSeeWallet: React.FC<KasSeeWalletProps> = ({
     }
 
     if (utxos.length === 0) {
-      alert('No UTXOs available to spend. Click "+250 KAS Faucet" to fund this address with testnet coins.');
+      alert(network === 'mainnet' ? 'No UTXOs available to spend.' : 'No UTXOs available to spend. Click "+250 KAS Faucet" to fund this address with testnet coins.');
       return;
     }
 
@@ -406,7 +424,7 @@ export const KasSeeWallet: React.FC<KasSeeWalletProps> = ({
             className="bg-[#0F1115] border border-[#222630] text-[#E2E8F0] text-xs font-mono rounded-xl px-2.5 py-1.5 outline-none cursor-pointer focus:border-[#F27D26]"
           >
             <option value="testnet-10">⚡ Testnet-10 (10 BPS)</option>
-            <option value="mainnet">Kaspa Mainnet (1 BPS)</option>
+            <option value="mainnet">Kaspa Mainnet (10 BPS)</option>
             <option value="testnet-11">Testnet-11 (10 BPS)</option>
             <option value="devnet">Kaspa Devnet</option>
             <option value="simnet">Sandbox Simulator</option>
@@ -537,14 +555,16 @@ export const KasSeeWallet: React.FC<KasSeeWalletProps> = ({
 
                   <div className="pt-2 border-t border-[#222630] flex items-center justify-between text-xs font-mono">
                     <span className="text-[#94A3B8]">{utxos.length} Spendable UTXOs</span>
-                    <button
-                      id="btn-kassee-faucet"
-                      onClick={handleRequestFaucet}
-                      className="px-2.5 py-1 bg-[#F27D26]/15 hover:bg-[#F27D26]/25 border border-[#F27D26]/30 text-[#F27D26] font-bold rounded-lg text-[11px] flex items-center gap-1"
-                    >
-                      <Sparkles className="w-3 h-3" />
-                      +250 KAS Faucet
-                    </button>
+                    {network !== 'mainnet' && (
+                      <button
+                        id="btn-kassee-faucet"
+                        onClick={handleRequestFaucet}
+                        className="px-2.5 py-1 bg-[#F27D26]/15 hover:bg-[#F27D26]/25 border border-[#F27D26]/30 text-[#F27D26] font-bold rounded-lg text-[11px] flex items-center gap-1"
+                      >
+                        <Sparkles className="w-3 h-3" />
+                        +250 KAS Faucet
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -786,13 +806,15 @@ export const KasSeeWallet: React.FC<KasSeeWalletProps> = ({
 
                 {utxos.length === 0 ? (
                   <div className="p-8 text-center bg-[#161920] border border-[#222630] rounded-2xl space-y-2">
-                    <p className="text-xs text-[#94A3B8]">No unspent outputs found for this address.</p>
-                    <button
-                      onClick={handleRequestFaucet}
-                      className="px-3 py-1.5 bg-[#F27D26] hover:bg-[#E06A14] text-slate-950 font-bold rounded-xl text-xs"
-                    >
-                      Request 250 KAS Faucet
-                    </button>
+                    <p className="text-xs text-[#94A3B8]">No unspent outputs found for these addresses.</p>
+                    {network !== 'mainnet' && (
+                      <button
+                        onClick={handleRequestFaucet}
+                        className="px-3 py-1.5 bg-[#F27D26] hover:bg-[#E06A14] text-slate-950 font-bold rounded-xl text-xs"
+                      >
+                        Request 250 KAS Faucet
+                      </button>
+                    )}
                   </div>
                 ) : (
                   <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1">

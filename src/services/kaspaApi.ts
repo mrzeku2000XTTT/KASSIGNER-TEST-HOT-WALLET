@@ -146,6 +146,7 @@ export async function fetchNetworkStats(network: NetworkId = 'testnet-10'): Prom
       if (res.ok) {
         const d = await res.json();
         if (d.virtualDaaScore) daa = Number(d.virtualDaaScore);
+        if (d.hashrate) hashrate = Number(d.hashrate);
       }
     } catch {}
   } else if (is10Bps) {
@@ -160,12 +161,14 @@ export async function fetchNetworkStats(network: NetworkId = 'testnet-10'): Prom
     } catch {}
   }
 
+  const bps = network === 'mainnet' ? 10 : (is10Bps ? 10 : 1);
+
   return {
-    bps: is10Bps ? 10 : 1,
+    bps,
     daaScore: daa,
     hashrate,
     kasPriceUsd: price,
-    blockReward: is10Bps ? 10 : 31.25,
+    blockReward: network === 'mainnet' ? 100 : (is10Bps ? 10 : 31.25),
   };
 }
 
